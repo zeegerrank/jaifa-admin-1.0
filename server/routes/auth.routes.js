@@ -61,8 +61,8 @@ router.post("login", async (req, res) => {
     return res.status(400).send({ message: "Password is invalid" });
   }
 
-  //**check if user is currently logged in */
-  //**which could be hacked */
+  /**check if user is currently logged in */
+  /**which could be hacked */
   const userLoggedIn = user.refreshToken;
   if (userLoggedIn) {
     user.updateOne({ refreshToken: null });
@@ -77,7 +77,7 @@ router.post("login", async (req, res) => {
 
   /**create refresh token */
   const randomNumbers = (Math.random() + 1).toString(4);
-  const refreshToken = jwt.sign({ id: user._id }, randomNumbers, JWT_SECRET);
+  const refreshToken = jwt.sign({ id: user._id, randomNumbers }, JWT_SECRET);
 
   /**add new refresh token to user db document */
   await user.updateOne({ refreshToken });
@@ -87,6 +87,25 @@ router.post("login", async (req, res) => {
 
   /**send access token attached to header  */
   return res.status(200).send({ message: "Login success", token: accessToken });
+});
+
+router.post("logout", async (req, res) => {
+  /**get refresh token*/
+  const { token } = req.cookies;
+  /**if no token */
+  if (!token) {
+    return res.status(400).send({ message: "Token not found" });
+  }
+  /**get id from token*/
+  const decoded = await jwt.verify(token, JWT_SECRET);
+  const userId = decoded.id;
+
+  /**remove refresh token from db and from client cookies*/
+  const user = User.findOne({ _id: userId });
+  await user.updateOne({ refreshToken: null });
+
+  //**logout success */
+  return res.status(204);
 });
 
 module.exports = router;
