@@ -7,6 +7,9 @@ app.post("/", (req, res) => {
   return res.status(200).send({ message: "Hello world" });
 });
 
+//**set up routes */
+app.use("/api/auth", require("./routes/auth.routes"));
+
 //**set up server */
 const PORT = process.env.PORT || 3500;
 const openServer = () => {
