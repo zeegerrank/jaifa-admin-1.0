@@ -5,6 +5,9 @@ const Profile = require("../models/Profile");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 
+//**JWT Secret */
+const JWT_SECRET = process.env.JWT_SECRET;
+
 router.post("/register", async (req, res) => {
   const { username, password, email } = req.body;
   /**check if username, password and email is prompted */
@@ -70,14 +73,16 @@ router.post("login", async (req, res) => {
   }
 
   /**create access token */
-  const JWT_SECRET = process.env.JWT_SECRET;
+
   const accessToken = jwt.sign({ user: username }, JWT_SECRET, {
     expiresIn: "1m",
   });
 
   /**create refresh token */
   const randomNumbers = (Math.random() + 1).toString(4);
-  const refreshToken = jwt.sign({ id: user._id, randomNumbers }, JWT_SECRET);
+  const refreshToken = jwt.sign({ id: user._id, randomNumbers }, JWT_SECRET, {
+    expiresIn: "30m",
+  });
 
   /**add new refresh token to user db document */
   await user.updateOne({ refreshToken });
@@ -104,8 +109,49 @@ router.post("logout", async (req, res) => {
   const user = User.findOne({ _id: userId });
   await user.updateOne({ refreshToken: null });
 
-  //**logout success */
-  return res.status(204);
+  /**logout success */
+  return res.status(200).send({ message: "Login succeeded" });
+});
+
+//**refresh route */
+router.post("refresh", async (req, res) => {
+  /**get refresh token from client's cookies */
+  const { token } = req.cookies;
+  /**if no token return unauthorized and logout*/
+  if (!token) {
+    return res
+      .status(401)
+      .send({ message: "Unauthorized! Please login again." });
+  }
+  /**get user from refresh token which contain user id */
+  const decoded = jwt.verify(token, JWT_SECRET);
+  const user = User.findOne({ _id: decoded.id });
+  /**create new refresh token */
+  const randomNumbers = (Math.random() + 1).toString(4);
+  const NewRefreshToken = jwt.sign(
+    { id: user._id, randomNumbers },
+    JWT_SECRET,
+    {
+      expiresIn: "30m",
+    }
+  );
+  /**if token is not match with db token, remove token from db and logout */
+  if (token !== user.refreshToken) {
+    await user.updateOne({ refreshToken: null });
+    return res
+      .status(401)
+      .send({ message: "Unauthorized! Please login again." });
+  }
+  /**update refresh token in db */
+  await user.updateOne({ refreshToken: NewRefreshToken });
+  /**send new refresh token to client's cookies*/
+  res.cookie("token", NewRefreshToken);
+  /**create new access token */
+  const accessToken = jwt.sign({ user: username }, JWT_SECRET, {
+    expiresIn: "1m",
+  });
+  /**send new access token to client */
+  return res.status(200).send({ message: "Refresh token sent", accessToken });
 });
 
 module.exports = router;
